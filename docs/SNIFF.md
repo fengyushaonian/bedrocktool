@@ -1,5 +1,7 @@
 # Packet sniffer
 
+> 中文图文教程（含界面截图、逐步操作与三个悬案的字节图解）：[SNIFF-TUTORIAL/index.html](SNIFF-TUTORIAL/index.html)
+
 `sniff` answers three questions about the server to client wire format that
 cannot be settled from the schema alone, because the community schemas disagree
 with each other and with the vanilla encoder:

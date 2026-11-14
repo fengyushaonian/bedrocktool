@@ -14,6 +14,32 @@ with each other and with the vanilla encoder:
 It does not trust any of the candidate schemas. It parses the same bytes under
 every plausible hypothesis and reports which one consumes the packet exactly.
 
+## The gui
+
+The gui build has the sniffer as a mode on the settings page, so the whole
+workflow stays in one window. Screenshot of a finished capture:
+
+```
+Sniffer                                    [Stop] [Save report] [Login] [Switch]
+Packet sniffer  [finished]
+7        7        0          0
+packets  matched  ambiguous  unmatched
+packet          len   verdict
+add_player      144   empty 8B · meta 4 · sel 4/4 · instance/full
+add_player      144   item 5 8B · meta 4 · sel 4/4 · instance/full
+add_actor        91   meta 4 · sel 4/4
+...
+VERDICT  [x] follow packets
+verdict: item stack uses item-instance; empty stacks still carry all trailing fields (8 bytes); ...
+```
+
+* The header counts stay live while packets arrive.
+* Rows are coloured: normal text when a single hypothesis consumed the packet,
+  amber when two did, red when none did.
+* The verdict panel shows the aggregate conclusion and can be saved with
+  *Save report*, which writes `sniff-report-<timestamp>.txt` into the data
+  directory next to the json log.
+
 ## Usage
 
 Live, through the proxy:
@@ -36,6 +62,9 @@ bedrocktool sniff -pcap captures/server.pcap2 -out sniff.jsonl
 Offline mode needs no account and no server. It reads the `BTCP` container
 directly and never decodes packets through gophertunnel, so a capture taken
 with a different protocol version can still be analysed.
+
+From the gui, both modes are the same form: fill *Address* for a live capture,
+or pick a `.pcap2` file in *Pcap File* and leave the address empty.
 
 Common flags:
 

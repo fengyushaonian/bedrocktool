@@ -113,7 +113,10 @@ func SplitHeader(data []byte) (id uint32, body []byte, err error) {
 
 // AnalyzePcap probes every interesting server to client record of a capture and
 // returns the aggregate verdict.
-func AnalyzePcap(path string, w *Writer, max int) (*Summary, int, error) {
+// progress, when set, is called once per probed packet with the running totals
+// and the observation that was just added. It lets a live view follow an
+// offline replay without buffering the whole capture first.
+func AnalyzePcap(path string, w *Writer, max int, progress func(*Summary, Observation)) (*Summary, int, error) {
 	r, err := OpenPcap(path)
 	if err != nil {
 		return nil, 0, err
@@ -146,6 +149,9 @@ func AnalyzePcap(path string, w *Writer, max int) (*Summary, int, error) {
 		}
 		sum.Add(o)
 		count++
+		if progress != nil {
+			progress(sum, o)
+		}
 	}
 	return sum, count, nil
 }

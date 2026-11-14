@@ -65,7 +65,7 @@ func New(g guim.Guim) pages.Page {
 	}
 
 	for k, cmd := range commands.Registered {
-		if !slices.Contains([]string{"worlds", "skins", "packs"}, k) {
+		if !slices.Contains([]string{"worlds", "skins", "packs", "sniff"}, k) {
 			continue
 		}
 		settingUI := &settingsPage{cmd: cmd, g: g}

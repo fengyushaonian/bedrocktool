@@ -2,6 +2,7 @@ package messages
 
 import (
 	"image"
+	"time"
 
 	"github.com/go-gl/mathgl/mgl32"
 	"github.com/sandertv/gophertunnel/minecraft/auth"
@@ -55,6 +56,31 @@ type EventUpdateDoInstall struct {
 
 type EventError struct {
 	Error error
+}
+
+// EventSniffObservation reports one probed server to client packet. The GUI
+// page keeps the last few thousand of these and renders them as a stream, so
+// the payload stays flat: no slices, no pointers to parser internals.
+type EventSniffObservation struct {
+	Time      time.Time
+	Dir       string
+	Name      string
+	Length    int
+	Verdict   string
+	Detail    string
+	Ambiguous bool
+	Matched   bool
+}
+
+// EventSniffSummary carries the running totals. It is sent after every
+// observation so the header stays live, and once more when the capture ends.
+type EventSniffSummary struct {
+	Text      string
+	Total     int
+	Matched   int
+	Ambiguous int
+	Unmatched int
+	Finished  bool
 }
 
 //
@@ -138,6 +164,11 @@ func SetEventHandler(f func(event any) error) {
 
 func SendEvent(event any) {
 	//fmt.Printf("event %s\n", reflect.TypeOf(event).String())
+	// The cli does not install an event handler, and handlers may emit events
+	// while no ui is listening, so dropping is the correct behaviour.
+	if eventHandler == nil {
+		return
+	}
 	err := eventHandler(event)
 	if err != nil {
 		logrus.Errorf("event handler errored %s", err)

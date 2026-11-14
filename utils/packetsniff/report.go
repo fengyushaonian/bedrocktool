@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,11 @@ type Writer struct {
 	Out     io.Writer
 	Log     func(format string, args ...any)
 	Verbose bool
+
+	// OnObservation is called for every observation after it has been written,
+	// so a live view can render the same data that goes to the log and file.
+	// It runs on the proxy goroutine and must not block.
+	OnObservation func(o Observation)
 }
 
 type jsonHypothesis struct {
@@ -117,18 +123,21 @@ func (w *Writer) Write(o Observation) error {
 	}
 
 	if w.Log != nil {
-		w.Log("%s", w.Line(o))
+		w.Log("%s", Line(o))
 		if w.Verbose {
-			for _, l := range w.Detail(o) {
+			for _, l := range Detail(o) {
 				w.Log("%s", l)
 			}
 		}
+	}
+	if w.OnObservation != nil {
+		w.OnObservation(o)
 	}
 	return nil
 }
 
 // Line renders the compact per packet line.
-func (w *Writer) Line(o Observation) string {
+func Line(o Observation) string {
 	head := fmt.Sprintf("[%s] %-22s len=%-4d", dirName(o.ToServer), o.Name, o.Length)
 	switch {
 	case o.Ambiguous:
@@ -155,7 +164,7 @@ func (w *Writer) Line(o Observation) string {
 }
 
 // Detail renders every hypothesis that was tried, for the verbose mode.
-func (w *Writer) Detail(o Observation) []string {
+func Detail(o Observation) []string {
 	lines := make([]string, 0, len(o.Outcomes))
 	for i, out := range o.Outcomes {
 		status := "FAIL"
@@ -227,4 +236,62 @@ func dirName(toServer bool) string {
 		return "c2s"
 	}
 	return "s2c"
+}
+
+// Short renders the verdict as one compact line for the gui table, which has
+// no room for the full hypothesis dump. It keeps every dimension the packet
+// could actually discriminate, so a reader can still tell the versions apart.
+func Short(o Observation) string {
+	switch {
+	case o.Ambiguous:
+		return fmt.Sprintf("ambiguous: %d parses consume it exactly", len(o.OutcomesOK()))
+	case o.Winner == nil:
+		return "no match  " + o.closest()
+	}
+
+	f := o.Winner.Facts
+	h := o.Winner.Hyp
+	var parts []string
+
+	if f.HasItem {
+		if f.ItemIsAir {
+			parts = append(parts, fmt.Sprintf("empty %dB", f.ItemBytes))
+		} else {
+			parts = append(parts, fmt.Sprintf("item %d %dB", f.ItemNetworkID, f.ItemBytes))
+		}
+	}
+	if f.MetaEntries > 0 {
+		parts = append(parts, fmt.Sprintf("meta %d", f.MetaEntries))
+		if h.LegacyType {
+			parts = append(parts, fmt.Sprintf("sel %d/%d", f.MetaLegacyMatch, f.MetaEntries))
+		}
+	}
+	if f.TeleportRead {
+		parts = append(parts, fmt.Sprintf("tp bool=%t", f.TeleportPresent))
+	}
+
+	if f.HasItem {
+		parts = append(parts, shortLayout(h))
+	}
+	if h.LegacyType && f.MetaEntries == 0 {
+		parts = append(parts, "sel")
+	}
+	if h.TeleportOption && !f.TeleportRead {
+		parts = append(parts, "tp option")
+	}
+	if h.PassengerOfBlock {
+		parts = append(parts, "pax")
+	}
+	return strings.Join(parts, " · ")
+}
+
+// shortLayout names the resolved item encoding, e.g. "instance/full".
+func shortLayout(h Hypothesis) string {
+	if h.Item == ItemLayoutV1 {
+		return "v1"
+	}
+	if h.Air == AirShort {
+		return "instance/short"
+	}
+	return "instance/full"
 }

@@ -4,9 +4,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/bedrock-tool/bedrocktool/ui/messages"
 	"github.com/bedrock-tool/bedrocktool/utils/packetsniff"
 	"github.com/bedrock-tool/bedrocktool/utils/proxy"
 	"github.com/sandertv/gophertunnel/minecraft/protocol/packet"
@@ -61,9 +63,9 @@ func NewSniffer(outPath string, max int, verbose bool) *proxy.Handler {
 
 func (s *sniffer) observe(id uint32, payload []byte, received time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if s.max > 0 && s.count >= s.max {
+		s.mu.Unlock()
 		return
 	}
 
@@ -73,6 +75,7 @@ func (s *sniffer) observe(id uint32, payload []byte, received time.Time) {
 				s.log.Errorf("cannot open %s: %s", s.outPath, err)
 			}
 			s.failed++
+			s.mu.Unlock()
 			return
 		}
 	}
@@ -80,10 +83,42 @@ func (s *sniffer) observe(id uint32, payload []byte, received time.Time) {
 	o := packetsniff.Probe(id, payload, false, received)
 	if err := s.writer.Write(o); err != nil {
 		s.log.Errorf("write failed: %s", err)
+		s.mu.Unlock()
 		return
 	}
 	s.summary.Add(o)
 	s.count++
+
+	// Build the ui payload while the lock is still held so the counters and the
+	// observation that produced them cannot drift apart.
+	event := &messages.EventSniffObservation{
+		Time:      o.Time,
+		Dir:       "s2c",
+		Name:      o.Name,
+		Length:    o.Length,
+		Verdict:   packetsniff.Short(o),
+		Ambiguous: o.Ambiguous,
+		Matched:   o.Winner != nil && !o.Ambiguous,
+	}
+	if s.verbose {
+		event.Detail = strings.Join(packetsniff.Detail(o), "\n")
+	}
+	totals := s.totalsLocked()
+	s.mu.Unlock()
+
+	messages.SendEvent(event)
+	messages.SendEvent(totals)
+}
+
+// totalsLocked snapshots the counters. The caller must hold s.mu.
+func (s *sniffer) totalsLocked() *messages.EventSniffSummary {
+	return &messages.EventSniffSummary{
+		Text:      s.summary.Conclusion(),
+		Total:     s.summary.Total,
+		Matched:   s.summary.Matched,
+		Ambiguous: s.summary.Ambiguous,
+		Unmatched: s.summary.Unmatched,
+	}
 }
 
 func (s *sniffer) open() error {
@@ -107,12 +142,18 @@ func (s *sniffer) open() error {
 
 func (s *sniffer) finish() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	if s.file == nil {
+		s.mu.Unlock()
 		if s.count == 0 {
 			s.log.Warn("no packets captured")
 		}
+		// Tell the ui the capture ended even when nothing was written, so the
+		// page can stop claiming it is still waiting for a client.
+		messages.SendEvent(&messages.EventSniffSummary{
+			Text:     "no packets captured",
+			Finished: true,
+		})
 		return
 	}
 
@@ -134,4 +175,11 @@ func (s *sniffer) finish() {
 		s.log.Errorf("close failed: %s", err)
 	}
 	s.log.Infof("wrote %s and %s", s.outPath, summaryPath)
+
+	done := s.totalsLocked()
+	done.Text = body
+	done.Finished = true
+	s.mu.Unlock()
+
+	messages.SendEvent(done)
 }

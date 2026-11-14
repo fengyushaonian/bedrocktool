@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,9 +329,11 @@ func TestNoMatchReportsCleanly(t *testing.T) {
 	if o.Winner != nil {
 		t.Fatalf("expected no match, got %s", o.Winner.Hyp)
 	}
-	var w Writer
-	if line := w.Line(o); line == "" {
+	if line := Line(o); line == "" {
 		t.Fatal("expected a report line")
+	}
+	if short := Short(o); !strings.HasPrefix(short, "no match") {
+		t.Fatalf("unexpected short verdict %q", short)
 	}
 }
 
@@ -400,7 +403,7 @@ func TestAnalyzePcap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sum, n, err := AnalyzePcap(path, &Writer{}, 0)
+	sum, n, err := AnalyzePcap(path, &Writer{}, 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

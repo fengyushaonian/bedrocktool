@@ -31,7 +31,7 @@ type SniffSettings struct {
 	Out     string `opt:"Output" flag:"out" default:"sniff.jsonl" desc:"json lines file to write observations to"`
 	Max     int    `opt:"Max Packets" flag:"max" default:"2000" desc:"stop after this many probed packets, 0 for no limit"`
 	Verbose bool   `opt:"Verbose" flag:"verbose" desc:"also record every hypothesis that was tried"`
-	Pcap    string `opt:"Pcap File" flag:"pcap" desc:"analyze an existing pcap2 capture instead of running a proxy" type:"file"`
+	Pcap    string `opt:"Pcap File" flag:"pcap" desc:"analyze an existing pcap2 capture instead of running a proxy" type:"file,pcap2"`
 }
 
 // SniffCMD probes the ambiguous parts of the server to client wire format.
